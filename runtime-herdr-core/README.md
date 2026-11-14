@@ -676,6 +676,11 @@ CI runs all of this in the `runtime-herdr-core` job on Python 3.9 and 3.12,
 with gc pinned to a gascity commit, and the unit tier again in the shared
 pytest step.
 
+When the hc pin moves, re-vendor `tests/fakehc/hc.openrpc.json` from the new
+tag and update its provenance file; the network check then proves the copy.
+Check the tag's `crates/herdr-core/src/config.rs` against `HC_CONFIG_KEYS` in
+`tests/fakehc/hcconfig.py` too.
+
 ### Live tier
 
 `tests/live` drives the pack against the pinned herdr-core itself, fetched
@@ -707,7 +712,10 @@ core under it and fails if any hc process or unit of the run is left):
   in four cases (A: launcher strip and re-scope plus an infrastructure
   scope; B: no re-scope; C: no launcher, the negative control that must lose
   the infrastructure; D: launcher only), and under a cgroup-wide kill of the
-  holder's unit (K2) on the systemd lane for C and D. A and B under K2 need
+  holder's unit (K2) on the systemd lane for C and D. In C a witness the
+  agent leaves in the holder's cgroup without `HC_SCOPE` (out of the sweep's
+  reach) survives K1 and dies under K2, so K2's cgroup-wide reach is shown,
+  not assumed. A and B under K2 need
   gc's own infrastructure scope around a real managed store and are skipped
   with that reason;
 - a kept terminal restarted after a holder loss reads dead, and gc's
@@ -716,11 +724,14 @@ core under it and fails if any hc process or unit of the run is left):
   a pseudo-terminal) is typed exactly once, after they stop, while gc's
   queue redelivers on anything but a delivery; `observe` stays within 4 s;
 - session secrets leave no trace on disk after the session ends, a `start`
-  killed mid-flight leaves no spawn file past the next op's sweep, and a
-  secret echoed to the screen is gone once the record is;
+  killed mid-flight before its `terminal.run` leaves no spawn file past the
+  next op's sweep, and a secret echoed to the screen is gone once the record
+  is (the systemd lane checks the production spawn directory under
+  `/run/user/<uid>`; the plain lane a scratch one);
 - an agent's own `hc` with the city core SIGKILLed: the shim refuses (or
-  reaches the city's own core if a holder restarted it), and no core starts
-  on another state directory;
+  reaches the city's own core if a holder restarted it), no hc core or
+  holder carries the agent's environment, and a second session is not
+  refused as foreign;
 - holder-loss orphans: the agent's `setsid sleep` is reaped by the corpse
   kill while a fenced infrastructure stand-in survives;
 - a core started outside the pack is refused with the `restart-core` fix.
@@ -729,10 +740,6 @@ Every kill the harness performs targets a process it started (recorded with
 its start time), a process carrying the run's mark, hc runtime of the run's
 own scratch state root, or the `hc-hold-*` unit read from the cgroup of one
 of its own core's holders, and goes through a pidfd where Python has one. The
-harness logic itself is unit-tested against fake-hc
+suites drive only the binary `fetch_hc.py` installed and verified against the
+pin. The harness logic itself is unit-tested against fake-hc
 (`tests/unit/test_live_harness.py`).
-
-When the hc pin moves, re-vendor `tests/fakehc/hc.openrpc.json` from the new
-tag and update its provenance file; the network check then proves the copy.
-Check the tag's `crates/herdr-core/src/config.rs` against `HC_CONFIG_KEYS` in
-`tests/fakehc/hcconfig.py` too.
